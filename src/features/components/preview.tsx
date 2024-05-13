@@ -1,0 +1,382 @@
+//@ts-nocheck
+
+import { Button } from "@/components/ui/button";
+import { Variants, motion } from "framer-motion";
+import { ExpandIcon, ShrinkIcon, RefreshCcwIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MediaBackground } from "./Survey/Components/MediaBackground";
+import Survey from "./Survey/Survey";
+
+
+
+type TPreviewType = "modal" | "fullwidth" | "email";
+
+interface PreviewSurveyProps {
+  survey: any;
+  setActiveQuestionId: (id: string | null) => void;
+  activeQuestionId?: string | null;
+  previewType?: any;
+  product: any;
+  environment: any;
+  languageCode: string;
+  onFileUpload: (file: File, config?: any) => Promise<string>;
+}
+
+let surveyNameTemp: any;
+
+const previewParentContainerVariant: Variants = {
+  expanded: {
+    position: "fixed",
+    height: "100%",
+    width: "100%",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    backdropFilter: "blur(15px)",
+    left: 0,
+    top: 0,
+    zIndex: 1040,
+    transition: {
+      ease: "easeIn",
+      duration: 0.001,
+    },
+  },
+  shrink: {
+    display: "none",
+    position: "fixed",
+    backgroundColor: "rgba(0, 0, 0, 0.0)",
+    backdropFilter: "blur(0px)",
+    transition: {
+      duration: 0,
+    },
+    zIndex: -1,
+  },
+};
+
+export default function PreviewSurvey({
+  setActiveQuestionId,
+  activeQuestionId,
+  survey,
+  previewType,
+  product,
+  environment,
+  languageCode,
+  onFileUpload,
+}: PreviewSurveyProps) {
+  const [isModalOpen, setIsModalOpen] = useState(true);
+  const [isFullScreenPreview, setIsFullScreenPreview] = useState(false);
+  const [widgetSetupCompleted, setWidgetSetupCompleted] = useState(false);
+  const [previewMode, setPreviewMode] = useState("desktop");
+  const [previewPosition, setPreviewPosition] = useState("relative");
+  const ContentRef = useRef<HTMLDivElement | null>(null);
+  const [shrink, setShrink] = useState(false);
+  const { productOverwrites } = survey || {};
+
+  const previewScreenVariants: Variants = {
+    expanded: {
+      right: "5%",
+      bottom: "10%",
+      top: "12%",
+      width: "40%",
+      position: "fixed",
+      height: "80%",
+      zIndex: 1050,
+      boxShadow: "0px 4px 5px 4px rgba(169, 169, 169, 0.25)",
+      transition: {
+        ease: "easeInOut",
+        duration: shrink ? 0.3 : 0,
+      },
+    },
+    expanded_with_fixed_positioning: {
+      zIndex: 1050,
+      position: "fixed",
+      top: "5%",
+      right: "5%",
+      bottom: "10%",
+      width: "90%",
+      height: "90%",
+      transition: {
+        ease: "easeOut",
+        duration: 0.4,
+      },
+    },
+    shrink: {
+      display: "relative",
+      width: ["83.33%"],
+      height: ["95%"],
+    },
+  };
+
+  const { placement: surveyPlacement } = productOverwrites || {};
+
+//   const placement = surveyPlacement || product.placement;
+
+  const styling= useMemo(() => {
+    // allow style overwrite is disabled from the product
+    if (!product?.styling?.allowStyleOverwrite) {
+      return product?.styling;
+    }
+
+    // allow style overwrite is enabled from the product
+    if (product?.styling?.allowStyleOverwrite) {
+      // survey style overwrite is disabled
+      if (!survey?.styling?.overwriteThemeStyling) {
+        return product?.styling;
+      }
+
+      // survey style overwrite is enabled
+      return survey?.styling;
+    }
+
+    return product.styling;
+  }, [product?.styling, survey?.styling]);
+
+  useEffect(() => {
+    // close modal if there are no questions left
+    if (survey.type === "web" && !survey?.thankYouCard?.enabled) {
+      if (activeQuestionId === "end") {
+        setIsModalOpen(false);
+        setTimeout(() => {
+          setActiveQuestionId(survey.questions[0]?.id);
+          setIsModalOpen(true);
+        }, 500);
+      }
+    }
+  }, [activeQuestionId, survey.type, survey, setActiveQuestionId]);
+
+  // this useEffect is fo refreshing the survey preview only if user is switching between templates on survey templates page and hence we are checking for survey.id === "someUniqeId1" which is a common Id for all templates
+  useEffect(() => {
+    if (survey.name !== surveyNameTemp && survey.id === "someUniqueId1") {
+      resetQuestionProgress();
+      surveyNameTemp = survey.name;
+    }
+  }, [survey]);
+
+  const resetQuestionProgress = () => {
+    const storePreviewMode = previewMode;
+    setPreviewMode("null");
+    setTimeout(() => {
+      setPreviewMode(storePreviewMode);
+    }, 10);
+
+    setActiveQuestionId(survey.welcomeCard.enabled ? "start" : survey?.questions[0]?.id);
+  };
+
+  useEffect(() => {
+    if (environment && environment.widgetSetupCompleted) {
+      setWidgetSetupCompleted(true);
+    } else {
+      setWidgetSetupCompleted(false);
+    }
+  }, [environment]);
+
+  const handlePreviewModalClose = () => {
+    setIsModalOpen(false);
+    setTimeout(() => {
+      setIsModalOpen(true);
+    }, 1000);
+  };
+
+  if (!previewType) {
+    previewType = widgetSetupCompleted ? "modal" : "fullwidth";
+
+    if (!activeQuestionId) {
+      return <></>;
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-center w-full h-full justify-items-center">
+      <motion.div
+        variants={previewParentContainerVariant}
+        className="fixed hidden h-[95%] w-5/6"
+        animate={isFullScreenPreview ? "expanded" : "shrink"}
+      />
+      <motion.div
+        layout
+        variants={previewScreenVariants}
+        animate={
+          isFullScreenPreview
+            ? previewPosition === "relative"
+              ? "expanded"
+              : "expanded_with_fixed_positioning"
+            : "shrink"
+        }
+        className="relative flex h-[95] max-h-[95%] w-5/6 items-center justify-center rounded-lg border border-slate-300 bg-slate-200">
+        {previewMode === "mobile" && (
+          <>
+            <p className="absolute top-0 left-0 px-2 py-1 m-2 text-xs rounded bg-slate-100 text-slate-400">
+              Preview
+            </p>
+            <div className="absolute top-0 right-0 m-2">
+              <ResetProgressButton resetQuestionProgress={resetQuestionProgress} />
+            </div>
+            <MediaBackground survey={survey} product={product} ContentRef={ContentRef} isMobilePreview>
+              {/* {previewType === "modal" ? (
+                <Modal
+                  isOpen={isModalOpen}
+                  placement={placement}
+                  highlightBorderColor={styling.highlightBorderColor?.light}
+                  previewMode="mobile"
+                  borderRadius={styling?.roundness ?? 8}
+                  background={styling?.cardBackgroundColor?.light}>
+                  <FormInline
+                    survey={survey}
+                    activeQuestionId={activeQuestionId || undefined}
+                    isBrandingEnabled={product.inAppSurveyBranding}
+                    onActiveQuestionChange={setActiveQuestionId}
+                    isRedirectDisabled={true}
+                    languageCode={languageCode}
+                    onFileUpload={onFileUpload}
+                    styling={styling}
+                    isCardBorderVisible={!styling.highlightBorderColor?.light}
+                    onClose={handlePreviewModalClose}
+                  />
+                </Modal>
+              ) : ( */}
+                <div className="w-full px-3">
+                  <div className="z-10 w-full max-w-md overflow-y-auto border border-transparent rounded-lg no-scrollbar">
+                    <FormInline
+                      survey={survey}
+                      activeQuestionId={activeQuestionId || undefined}
+                      isBrandingEnabled={false}
+                      onActiveQuestionChange={setActiveQuestionId}
+                      onFileUpload={onFileUpload}
+                      languageCode={languageCode}
+                      responseCount={42}
+                      styling={styling}
+                    />
+                  </div>
+                </div>
+              {/* )} */}
+            </MediaBackground>
+          </>
+        )}
+        {previewMode === "desktop" && (
+          <div className="flex flex-col flex-1 w-5/6 h-full">
+            <div className="flex items-center w-full h-8 rounded-t-lg bg-slate-100">
+              <div className="flex ml-6 space-x-2">
+                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+              </div>
+              <div className="flex items-center justify-between w-full ml-4 font-mono text-sm text-slate-400 ">
+                <p>{previewType === "modal" ? "Your web app" : "Preview"}</p>
+
+                <div className="flex items-center">
+                  {isFullScreenPreview ? (
+                    <ShrinkIcon
+                      className="w-4 h-4 mr-2 cursor-pointer"
+                      onClick={() => {
+                        setShrink(true);
+                        setPreviewPosition("relative");
+                        setTimeout(() => setIsFullScreenPreview(false), 300);
+                      }}
+                    />
+                  ) : (
+                    <ExpandIcon
+                      className="w-4 h-4 mr-2 cursor-pointer"
+                      onClick={() => {
+                        setShrink(false);
+                        setIsFullScreenPreview(true);
+                        setTimeout(() => setPreviewPosition("fixed"), 300);
+                      }}
+                    />
+                  )}
+                  <ResetProgressButton resetQuestionProgress={resetQuestionProgress} />
+                </div>
+              </div>
+            </div>
+
+            {/* {previewType === "modal" ? (
+              <Modal
+                isOpen={isModalOpen}
+                placement={placement}
+                highlightBorderColor={styling.highlightBorderColor?.light}
+                previewMode="desktop"
+                borderRadius={styling.roundness ?? 8}
+                background={styling.cardBackgroundColor?.light}>
+                <FormInline
+                  survey={survey}
+                  activeQuestionId={activeQuestionId || undefined}
+                  isBrandingEnabled={product.inAppSurveyBranding}
+                  onActiveQuestionChange={setActiveQuestionId}
+                  isRedirectDisabled={true}
+                  languageCode={languageCode}
+                  onFileUpload={onFileUpload}
+                  styling={styling}
+                  isCardBorderVisible={!styling.highlightBorderColor?.light}
+                  onClose={handlePreviewModalClose}
+                />
+              </Modal>
+            ) : (
+              <MediaBackground survey={survey} product={product} ContentRef={ContentRef} isEditorView>
+                <div className="z-0 w-full max-w-md p-4 rounded-lg">
+                  <FormInline
+                    survey={survey}
+                    activeQuestionId={activeQuestionId || undefined}
+                    isBrandingEnabled={product.linkSurveyBranding}
+                    onActiveQuestionChange={setActiveQuestionId}
+                    isRedirectDisabled={true}
+                    onFileUpload={onFileUpload}
+                    languageCode={languageCode}
+                    responseCount={42}
+                    styling={styling}
+                  />
+                </div>
+              </MediaBackground>
+            )} */}
+                 <MediaBackground survey={survey} product={product} ContentRef={ContentRef} isEditorView>
+                <div className="z-0 w-full max-w-md p-4 rounded-lg">
+                  <FormInline
+                    survey={survey}
+                    activeQuestionId={activeQuestionId || undefined}
+                    isBrandingEnabled={product?.linkSurveyBranding}
+                    onActiveQuestionChange={setActiveQuestionId}
+                    isRedirectDisabled={true}
+                    onFileUpload={onFileUpload}
+                    languageCode={languageCode}
+                    responseCount={42}
+                    styling={styling}
+                  />
+                </div>
+              </MediaBackground>
+          </div>
+        )}
+      </motion.div>
+
+      {/* for toggling between mobile and desktop mode  */}
+      <div className="flex p-1 mt-2 border-2 rounded-full border-slate-300">
+        {/* <TabOption
+          active={previewMode === "mobile"}
+          icon={<SmartphoneIcon className="w-4 h-4 mx-4 my-2 text-slate-700" />}
+          onClick={() => setPreviewMode("mobile")}
+        />
+        <TabOption
+          active={previewMode === "desktop"}
+          icon={<MonitorIcon className="w-4 h-4 mx-4 my-2 text-slate-700" />}
+          onClick={() => setPreviewMode("desktop")}
+        /> */}
+      </div>
+    </div>
+  );
+}
+
+function ResetProgressButton({ resetQuestionProgress }) {
+  return (
+    <Button
+      variant="default"
+      className="py-0.2 mr-2 bg-white px-2 font-sans text-sm text-slate-500"
+      onClick={resetQuestionProgress}>
+      Restart
+      <RefreshCcwIcon className="w-4 h-4 ml-2" />
+    </Button>
+  );
+}
+
+
+export function FormInline(props) {
+    return (
+      <div id="fbjs" className="w-full h-full ">
+        <Survey {...props} />
+      </div>
+    );
+  }
